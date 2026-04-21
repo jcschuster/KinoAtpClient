@@ -1,0 +1,23 @@
+{
+  "name": "system_on_tptp_assets",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "watch": "vite build --watch",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Johannes Schuster",
+  "license": "MIT",
+  "description": "Elixir Livebook Smart Cell for connecting to solvers on SystemOnTPTP",
+  "dependencies": {
+    "@tailwindcss/vite": "^4.2.2",
+    "monaco-editor": "^0.53.0",
+    "monaco-themes": "^0.4.7"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.2.2",
+    "vite": "^6.4.2"
+  }
+}
