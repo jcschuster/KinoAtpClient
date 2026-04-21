@@ -2,7 +2,7 @@
 
 ```elixir
 Mix.install([
-  {:kino_atp_client, path: Path.join(__DIR__, "..")}
+  {:kino_atp_client, "~> 0.1"}
 ])
 ```
 

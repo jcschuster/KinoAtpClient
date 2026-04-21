@@ -44,7 +44,7 @@ defmodule KinoAtpClient.MixProject do
 
   defp docs do
     [
-      main: "AtpClient",
+      main: "KinoAtpClient",
       extras: ["README.md", "examples/demo.livemd"],
       source_url: @source_url,
       source_ref: "v#{@version}"
