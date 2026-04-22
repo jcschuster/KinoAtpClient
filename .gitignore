@@ -22,4 +22,4 @@ erl_crash.dump
 # Ignore package tarball (built via "mix hex.build").
 kino_atp_client-*.tar
 
-*/node_modules/
+/assets/system_on_tptp/node_modules/
