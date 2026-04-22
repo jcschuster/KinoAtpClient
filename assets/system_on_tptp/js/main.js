@@ -146,6 +146,7 @@ export function init(ctx, payload) {
 		language: 'tptp',
 		minimap: { enabled: false },
 		stickyScroll: { enabled: false },
+		renderLineHighlightOnlyWhenFocus: true,
 		bracketPairColorization: { enabled: true },
 		automaticLayout: true,
 		scrollBeyondLastLine: false,

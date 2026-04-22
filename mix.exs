@@ -1,7 +1,7 @@
 defmodule KinoAtpClient.MixProject do
   use Mix.Project
 
-  @version "0.1.0"
+  @version "0.1.1"
   @source_url "https://github.com/jcschuster/KinoAtpClient"
 
   def project do
@@ -13,7 +13,7 @@ defmodule KinoAtpClient.MixProject do
       start_permanent: Mix.env() == :prod,
       deps: deps(),
       package: package(),
-      name: "AtpClient",
+      name: "KinoAtpClient",
       source_url: @source_url,
       docs: docs()
     ]
