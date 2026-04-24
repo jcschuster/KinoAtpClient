@@ -1,6 +1,12 @@
 defmodule KinoAtpClient.SystemOnTptp do
   @moduledoc """
   A Smart Cell dedicated to executing TH0/TPTP problems via SystemOnTPTP.
+
+  In addition to running a chosen prover, the cell drives live syntax and
+  type feedback in the editor: every debounced keystroke fires a
+  `"check_syntax"` event, the cell calls `AtpClient.Lint.analyze/2`, and
+  the resulting diagnostics and declared symbols are streamed back to
+  the Monaco editor for marker placement, hover cards, and completion.
   """
 
   use Kino.JS, assets_path: "lib/assets/system_on_tptp"
@@ -8,6 +14,8 @@ defmodule KinoAtpClient.SystemOnTptp do
   use Kino.SmartCell, name: "SystemOnTPTP"
 
   alias AtpClient.SystemOnTptp
+  alias AtpClient.Lint
+  alias AtpClient.Lint.Report
 
   @impl true
   def init(attrs, ctx) do
@@ -21,7 +29,9 @@ defmodule KinoAtpClient.SystemOnTptp do
       system: Map.get(attrs, "system", "Leo-III---1.7.20"),
       time_limit: Map.get(attrs, "time_limit", 5),
       theme: Map.get(attrs, "theme", "Dracula"),
-      solvers: ["Leo-III---1.7.20"]
+      tptp4x_enabled: Map.get(attrs, "tptp4x_enabled", true),
+      solvers: ["Leo-III---1.7.20"],
+      lint_task: nil
     }
 
     send(self(), :fetch_solvers)
@@ -30,7 +40,8 @@ defmodule KinoAtpClient.SystemOnTptp do
 
   @impl true
   def handle_connect(ctx) do
-    {:ok, ctx.assigns, ctx}
+    payload = Map.drop(ctx.assigns, [:lint_task])
+    {:ok, payload, ctx}
   end
 
   @impl true
@@ -54,8 +65,34 @@ defmodule KinoAtpClient.SystemOnTptp do
   end
 
   @impl true
+  def handle_info(
+        {ref, {:lint_ok, %Report{} = report}},
+        %{assigns: %{lint_task: %Task{ref: ref}}} = ctx
+      ) do
+    Process.demonitor(ref, [:flush])
+
+    broadcast_event(ctx, "lint_result", %{
+      "diagnostics" => Enum.map(report.diagnostics, &Map.from_struct/1),
+      "symbols" => Enum.map(report.symbols, &Map.from_struct/1)
+    })
+
+    {:noreply, assign(ctx, lint_task: nil)}
+  end
+
+  @impl true
+  def handle_info({ref, {:lint_ok, %Report{}}}, ctx) when is_reference(ref) do
+    Process.demonitor(ref, [:flush])
+    {:noreply, ctx}
+  end
+
+  @impl true
+  def handle_info({:DOWN, _ref, :process, _pid, _reason}, ctx) do
+    {:noreply, ctx}
+  end
+
+  @impl true
   def handle_event("update", params, ctx) do
-    allowed = ~w(problem_str system time_limit theme)
+    allowed = ~w(problem_str system time_limit theme tptp4x_enabled)
 
     atom_params =
       for {k, v} <- params, k in allowed, into: %{} do
@@ -84,8 +121,34 @@ defmodule KinoAtpClient.SystemOnTptp do
   end
 
   @impl true
+  def handle_event("check_syntax", %{"problem" => problem}, ctx) when is_binary(problem) do
+    ctx = cancel_lint_task(ctx)
+    enabled_tptp4x = Map.get(ctx.assigns, :tptp4x_enabled, true)
+
+    backends = if enabled_tptp4x, do: [:local, :tptp4x], else: [:local]
+
+    task =
+      Task.async(fn ->
+        try do
+          {:lint_ok, Lint.analyze(problem, backends: backends)}
+        rescue
+          _ -> {:lint_ok, %Report{diagnostics: [], symbols: []}}
+        end
+      end)
+
+    {:noreply, assign(ctx, lint_task: task)}
+  end
+
+  defp cancel_lint_task(%{assigns: %{lint_task: %Task{} = task}} = ctx) do
+    Task.shutdown(task, :brutal_kill)
+    assign(ctx, lint_task: nil)
+  end
+
+  defp cancel_lint_task(ctx), do: ctx
+
+  @impl true
   def to_attrs(ctx) do
-    Map.take(ctx.assigns, [:problem_str, :system, :time_limit, :theme])
+    Map.take(ctx.assigns, [:problem_str, :system, :time_limit, :theme, :tptp4x_enabled])
   end
 
   @impl true

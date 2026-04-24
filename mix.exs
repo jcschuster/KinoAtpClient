@@ -29,7 +29,7 @@ defmodule KinoAtpClient.MixProject do
   defp deps do
     [
       {:kino, "~> 0.19"},
-      {:atp_client, "~> 0.1"},
+      {:atp_client, github: "jcschuster/AtpClient"},
       {:ex_doc, "~> 0.40"}
     ]
   end
