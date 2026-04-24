@@ -19,22 +19,23 @@ monaco.languages.setLanguageConfiguration('tptp', {
 	autoClosingPairs: [
 		{ open: '[', close: ']' },
 		{ open: '(', close: ')' },
+		{ open: '{', close: '}' },
 	],
 });
 
 monaco.languages.setMonarchTokensProvider('tptp', {
 	tokenizer: {
 		root: [
-			[/[A-Z_][a-zA-Z0-9_]*/, 'variable'],
+			[/[A-Z][a-zA-Z0-9_]*/, 'variable'],
 			[
-				/\b(thf|tff|fof|cnf|include|axiom|hypothesis|definition|assumption|lemma|theorem|corollary|conjecture|negated_conjecture|plain|type|interpretation|unknown)\b/,
+				/\b(thf|tff|fof|cnf|tpi|tcf|include|axiom|hypothesis|definition|assumption|lemma|theorem|corollary|conjecture|negated_conjecture|plain|type|interpretation|unknown|\$(modal|alethic_modal|deontic_modal|epistemic_modal|doxastic_modal|temporal_instant|modal_system_{K,M,B,D,S4,S5}|modal_axiom_{K,M,B,D,4,5}|domains|constant|varying|cumulative|decreasing|designation|rigid|flexible|terms|local|global|modalities|time|reflexivity|irreflexivity|transitivity|asymmetry|anti_symmetry|linearity|forward_linearity|backward_linearity|beginning|end|no_beginning|no_end|density|forward_discreteness|backward_discreteness))\b/,
 				'keyword',
 			],
 			[/\$(i|o|tType|oType|iType|real|rat|int)\b/, 'type'],
 			[/\$(true|false)\b/, 'constant'],
-			[/(!|\?|\^|@\+|@-|!>|\?\*)/, 'keyword.control'],
+			[/(!|\?|\^|@\+|@-|!>|\?\*|\$(ite|let))/, 'keyword.control'],
 			[
-				/(~|&|\||=>|<=|<=>|<~>|~&|~\||=|!=|>|@|!!|\?\?|<<|-->|:=|==|@@\+|@@-|@=|\*|\+)/,
+				/(~|&|\||=>|<=|<=>|<~>|~&|~\||=|!=|>|@|!!|\?\?|<<|-->|:=|==|@@\+|@@-|@=|\*|\+|\$(box|dia)|\[.\]|<.>|\{\$(necessary|possible|obligatory|permissible|knows|canKnow|believes|canBelieve)\})/,
 				'keyword.operator',
 			],
 			[/[a-z][a-zA-Z0-9_]*/, 'identifier'],
@@ -100,6 +101,138 @@ const TPTP_BUILTINS = {
 	$to_real: 'Arithmetic: conversion to real.',
 	$distinct: 'Built-in predicate asserting mutual distinctness.',
 };
+
+const TPTP_NC_CONNECTIVES = {
+	$box: 'Necessity operator (□). Unparameterised, also writable as [.].',
+	$dia: 'Possibility operator (◇). Unparameterised, also writable as <.>.',
+	$necessary: 'Alethic necessity.',
+	$possible: 'Alethic possibility.',
+	$obligatory: 'Deontic: it is obligatory that.',
+	$permissible: 'Deontic: it is permitted that.',
+	$forbidden: 'Deontic: it is forbidden that.',
+	$knows: 'Epistemic: the indexed agent knows that. Index given as first parameter, e.g. {$knows(#alice)}.',
+	$canKnow: 'Epistemic: it is possible for the indexed agent to know that.',
+	$believes: 'Doxastic: the indexed agent believes that.',
+	$canBelieve:
+		'Doxastic: it is possible for the indexed agent to believe that.',
+	$future: 'Temporal: at some future instant.',
+};
+
+const TPTP_LOGIC_PROPERTIES = {
+	$domains: 'Logic property: how domains vary across worlds.',
+	$designation:
+		'Logic property: whether term denotations depend on the world.',
+	$terms: 'Logic property: whether terms are interpreted locally or globally.',
+	$modalities:
+		'Logic property: the modal system or axiom set that characterises the accessibility relation.',
+	$time: 'Logic property: structural properties of the temporal ordering.',
+};
+
+const TPTP_DOMAIN_VALUES = {
+	$constant: 'Constant-domain semantics: every world has the same domain.',
+	$varying: 'Varying-domain semantics: each world may have its own domain.',
+	$cumulative:
+		'Cumulative domains: varying, with the domain of each accessible world a superset of its predecessor.',
+	$decreasing:
+		'Decreasing domains: varying, with the domain of each accessible world a subset of its predecessor.',
+};
+
+const TPTP_DESIGNATION_VALUES = {
+	$rigid: 'Rigid designation: a term denotes the same object in every world.',
+	$flexible:
+		'Flexible designation: a term may denote different objects in different worlds.',
+};
+
+const TPTP_TERMS_VALUES = {
+	$local: 'Terms are interpreted in the current world only.',
+	$global: 'Terms are interpreted globally across all worlds.',
+};
+
+const TPTP_MODAL_SYSTEMS = {
+	$modal_system_K:
+		'System K: just the K axiom plus necessitation. Any normal frame.',
+	$modal_system_M:
+		'System M (usually called T): K + reflexivity. Each world sees itself.',
+	$modal_system_B: 'System B: K + reflexivity + symmetry.',
+	$modal_system_D:
+		'System D: K + seriality. Deontic logic — every world has a successor.',
+	$modal_system_S4:
+		'System S4: K + reflexivity + transitivity. Common for provability and knowledge.',
+	$modal_system_S5:
+		'System S5: K + equivalence-relation frames (reflexive + symmetric + transitive).',
+};
+
+const TPTP_MODAL_AXIOMS = {
+	$modal_axiom_K:
+		'Axiom K: □(A→B) → (□A → □B). Distribution of □ over implication — holds in every normal modal logic.',
+	$modal_axiom_M:
+		'Axiom M (a.k.a. T): □A → A. Characterises reflexive frames.',
+	$modal_axiom_B: 'Axiom B: A → □◇A. Characterises symmetric frames.',
+	$modal_axiom_D:
+		'Axiom D: □A → ◇A. Characterises serial frames (every world has a successor).',
+	$modal_axiom_4: 'Axiom 4: □A → □□A. Characterises transitive frames.',
+	$modal_axiom_5: 'Axiom 5: ◇A → □◇A. Characterises Euclidean frames.',
+};
+
+const TPTP_TIME_PROPERTIES = {
+	$reflexivity: 'Reflexive: ∀t. t R t.',
+	$irreflexivity: 'Irreflexive: ∀t. ¬(t R t).',
+	$transitivity: 'Transitive: ∀t,u,v. t R u ∧ u R v → t R v.',
+	$asymmetry: 'Asymmetric: ∀t,u. t R u → ¬(u R t).',
+	$anti_symmetry: 'Antisymmetric: ∀t,u. t R u ∧ u R t → t = u.',
+	$linearity:
+		'Linear / total: ∀t,u. t R u ∨ u R t ∨ t = u. Time is a single line.',
+	$forward_linearity:
+		'No forward branching: distinct successors of a moment are themselves R-comparable.',
+	$backward_linearity:
+		'No backward branching: distinct predecessors of a moment are themselves R-comparable.',
+	$beginning: 'Time has a first moment: ∃t. ∀u ≠ t. t R u.',
+	$end: 'Time has a last moment: ∃t. ∀u ≠ t. u R t.',
+	$no_beginning: 'Time extends infinitely into the past (no first moment).',
+	$no_end: 'Time extends infinitely into the future (no last moment).',
+	$density:
+		'Dense: ∀t,u. t R u → ∃v. t R v ∧ v R u. Between any two moments lies a third (like ℚ).',
+	$forward_discreteness:
+		'Every moment with a successor has an immediate successor (like ℤ forwards).',
+	$backward_discreteness:
+		'Every moment with a predecessor has an immediate predecessor (like ℤ backwards).',
+};
+
+const TPTP_ARITHMETIC_EXTRA = {
+	$quotient_e:
+		'Euclidean integral quotient: result with non-negative remainder.',
+	$quotient_t:
+		'Truncated integral quotient: round the real quotient toward zero.',
+	$quotient_f: 'Floor integral quotient: round the real quotient toward −∞.',
+	$remainder_e: 'Euclidean remainder, paired with $quotient_e.',
+	$remainder_t: 'Truncated remainder, paired with $quotient_t.',
+	$remainder_f: 'Floor remainder, paired with $quotient_f.',
+	$floor: "Floor: the largest integral value (in the argument's type) not greater than the argument.",
+	$ceiling:
+		"Ceiling: the smallest integral value (in the argument's type) not less than the argument.",
+	$truncate:
+		"Truncate toward zero: integral value with magnitude not exceeding the argument's absolute value.",
+	$round: 'Round to nearest integral value; ties go to the nearest even integer.',
+};
+
+const TPTP_OTHER_DEFINED = {
+	$ite: '$ite(Cond, Then, Else) — conditional expression (TXF/THF). First argument is a boolean, the other two share a type which is the result type.',
+	$let: "$let(Types, Defns, Body) — local definitions usable inside Body (TXF/THF). Types declare the local symbols' types; Defns bind them.",
+};
+
+TPTP_BUILTINS = Object.assign(
+	TPTP_BUILTINS,
+	TPTP_NC_CONNECTIVES,
+	TPTP_LOGIC_PROPERTIES,
+	TPTP_DOMAIN_VALUES,
+	TPTP_DESIGNATION_VALUES,
+	TPTP_TERMS_VALUES,
+	TPTP_MODAL_SYSTEMS,
+	TPTP_MODAL_AXIOMS,
+	TPTP_TIME_PROPERTIES,
+	TPTP_ARITHMETIC_EXTRA,
+	TPTP_OTHER_DEFINED,
+);
 
 function ensureTptpProviders() {
 	if (window.__tptpProvidersRegistered) return;
