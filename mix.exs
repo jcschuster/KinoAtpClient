@@ -30,7 +30,7 @@ defmodule KinoAtpClient.MixProject do
     [
       {:kino, "~> 0.19"},
       {:atp_client, "~> 0.1.3"},
-      {:ex_doc, "~> 0.40"}
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false}
     ]
   end
 

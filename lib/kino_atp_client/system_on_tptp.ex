@@ -29,7 +29,7 @@ defmodule KinoAtpClient.SystemOnTptp do
       system: Map.get(attrs, "system", "Leo-III---1.7.20"),
       time_limit: Map.get(attrs, "time_limit", 5),
       theme: Map.get(attrs, "theme", "Dracula"),
-      tptp4x_enabled: Map.get(attrs, "tptp4x_enabled", true),
+      tptp4x_enabled: Map.get(attrs, "tptp4x_enabled", false),
       solvers: ["Leo-III---1.7.20"],
       lint_task: nil
     }
@@ -123,7 +123,7 @@ defmodule KinoAtpClient.SystemOnTptp do
   @impl true
   def handle_event("check_syntax", %{"problem" => problem}, ctx) when is_binary(problem) do
     ctx = cancel_lint_task(ctx)
-    enabled_tptp4x = Map.get(ctx.assigns, :tptp4x_enabled, true)
+    enabled_tptp4x = Map.get(ctx.assigns, :tptp4x_enabled, false)
 
     backends = if enabled_tptp4x, do: [:local, :tptp4x], else: [:local]
 
