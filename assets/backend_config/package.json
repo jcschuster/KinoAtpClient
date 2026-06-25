@@ -1,0 +1,19 @@
+{
+  "name": "backend_config_assets",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "build": "vite build",
+    "watch": "vite build --watch"
+  },
+  "author": "Johannes Schuster",
+  "license": "MIT",
+  "description": "Livebook Smart Cell form for AtpClient backend configuration.",
+  "dependencies": {
+    "@tailwindcss/vite": "^4.2.2"
+  },
+  "devDependencies": {
+    "tailwindcss": "^4.2.2",
+    "vite": "^6.4.2"
+  }
+}

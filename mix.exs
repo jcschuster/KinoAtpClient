@@ -1,13 +1,15 @@
 defmodule KinoAtpClient.MixProject do
   use Mix.Project
 
-  @version "0.1.4"
+  @version "0.2.0"
   @source_url "https://github.com/jcschuster/KinoAtpClient"
 
   def project do
     [
       app: :kino_atp_client,
-      description: "Provides a Smart Cell for querying external provers on SystemOnTPTP.",
+      description:
+        "Livebook Smart Cells for AtpClient: a unified frontend over SystemOnTPTP, " <>
+          "StarExec, Isabelle, and local TPTP-compliant prover binaries.",
       version: @version,
       elixir: "~> 1.19",
       start_permanent: Mix.env() == :prod,
@@ -29,8 +31,10 @@ defmodule KinoAtpClient.MixProject do
   defp deps do
     [
       {:kino, "~> 0.19"},
-      {:atp_client, "~> 0.2"},
-      {:ex_doc, "~> 0.40", only: :dev, runtime: false}
+      {:atp_client, github: "jcschuster/AtpClient"},
+      {:ex_doc, "~> 0.40", only: :dev, runtime: false},
+      {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
     ]
   end
 
