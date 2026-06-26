@@ -16,11 +16,12 @@ Two cells ship in this package:
   (raw prover text for SoTPTP, SZS badge for StarExec/LocalExec, per-lemma
   table for Isabelle).
 
-  Isabelle works **zero-config** when the `isabelle` executable is on
-  `PATH` (or `ISABELLE_TOOL` is set): `KinoAtpClient.IsabelleRuntime`
-  auto-spawns a local server, opens one `HOL` session, loads the bundled
-  `TPTP.thy`, and reuses both across solves. No `host`, `port`, `password`,
-  or shared `local_dir` to configure.
+    Isabelle works **zero-config** when the `isabelle` executable is on
+    `PATH` (or `ISABELLE_TOOL` is set): `KinoAtpClient.IsabelleRuntime`
+    auto-spawns a local server, opens one `HOL` session, loads the bundled
+    `TPTP.thy`, and reuses both across solves. No `host`, `port`, `password`,
+    or shared `local_dir` to configure.
+
 - **ATP Backend Configuration** — schema-driven form built from each
   backend's `AtpClient.Config.Field` list. Fields are grouped into
   Connection / Defaults / Advanced sections; a Verify button calls the
@@ -33,7 +34,7 @@ Two cells ship in this package:
 ```elixir
 def deps do
   [
-    {:kino_atp_client, "~> 0.3"}
+    {:kino_atp_client, "~> 0.2"}
   ]
 end
 ```
@@ -43,7 +44,7 @@ end
 Add `KinoAtpClient` to a Livebook:
 
 ```elixir
-Mix.install([{:kino_atp_client, "~> 0.3"}])
+Mix.install([{:kino_atp_client, "~> 0.2"}])
 ```
 
 Both Smart Cells then appear in the cell picker. Insert an "ATP Backend
