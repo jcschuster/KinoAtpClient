@@ -1,7 +1,7 @@
 defmodule KinoAtpClient.MixProject do
   use Mix.Project
 
-  @version "0.2.0"
+  @version "0.3.0"
   @source_url "https://github.com/jcschuster/KinoAtpClient"
 
   def project do
@@ -31,7 +31,7 @@ defmodule KinoAtpClient.MixProject do
   defp deps do
     [
       {:kino, "~> 0.19"},
-      {:atp_client, github: "jcschuster/AtpClient"},
+      {:atp_client, "~> 0.3"},
       {:ex_doc, "~> 0.40", only: :dev, runtime: false},
       {:credo, "~> 1.7", only: [:dev, :test], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
@@ -42,7 +42,7 @@ defmodule KinoAtpClient.MixProject do
     [
       licenses: ["MIT"],
       links: %{"GitHub" => @source_url},
-      files: ~w(lib mix.exs README* LICENSE*)
+      files: ~w(lib examples mix.exs README* LICENSE*)
     ]
   end
 

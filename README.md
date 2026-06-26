@@ -33,7 +33,7 @@ Two cells ship in this package:
 ```elixir
 def deps do
   [
-    {:kino_atp_client, "~> 0.2"}
+    {:kino_atp_client, "~> 0.3"}
   ]
 end
 ```
@@ -43,7 +43,7 @@ end
 Add `KinoAtpClient` to a Livebook:
 
 ```elixir
-Mix.install([{:kino_atp_client, "~> 0.2"}])
+Mix.install([{:kino_atp_client, "~> 0.3"}])
 ```
 
 Both Smart Cells then appear in the cell picker. Insert an "ATP Backend

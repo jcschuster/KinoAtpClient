@@ -359,7 +359,10 @@ defmodule KinoAtpClient.BackendConfig do
 
   defp encode_default(nil), do: nil
   defp encode_default(value) when is_list(value), do: value
-  defp encode_default(value) when is_binary(value) or is_number(value) or is_boolean(value), do: value
+
+  defp encode_default(value) when is_binary(value) or is_number(value) or is_boolean(value),
+    do: value
+
   defp encode_default(value), do: to_string(value)
 
   defp humanize(key) do

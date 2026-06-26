@@ -16,10 +16,9 @@ defmodule KinoAtpClient.IsabelleRuntime do
       a configured shared directory, so the BEAM and the Isabelle server
       always agree on where the theory lives.
 
-  The runtime is started as a permanent child of
-  `KinoAtpClient.Application` but stays *idle* until the first
-  `query_tptp/2` call — no Isabelle process is spawned just by loading the
-  package.
+  The runtime is started as a permanent child of the package's application
+  supervision tree but stays *idle* until the first `query_tptp/2` call — no
+  Isabelle process is spawned just by loading the package.
   """
 
   use GenServer

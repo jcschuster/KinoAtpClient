@@ -39,8 +39,7 @@ defmodule KinoAtpClient.AtpSolver do
   @impl true
   def init(attrs, ctx) do
     state = %{
-      problem_str:
-        Map.get(attrs, "problem_str", "thf(test, conjecture, $true => $true)."),
+      problem_str: Map.get(attrs, "problem_str", "thf(test, conjecture, $true => $true)."),
       backend: Map.get(attrs, "backend", @default_backend),
       system: Map.get(attrs, "system", ""),
       time_limit: Map.get(attrs, "time_limit", 5),
@@ -200,8 +199,7 @@ defmodule KinoAtpClient.AtpSolver do
   defp run_backend(%{backend: "isabelle", problem_str: prob, proof_method: method}) do
     case isabelle_query(prob, proof_method: method) do
       {:ok, lemmas} ->
-        {:broadcast, "lemma_results",
-         %{"lemmas" => Enum.map(lemmas, &lemma_payload/1)}}
+        {:broadcast, "lemma_results", %{"lemmas" => Enum.map(lemmas, &lemma_payload/1)}}
 
       {:error, reason} ->
         error_event(reason)
@@ -245,7 +243,8 @@ defmodule KinoAtpClient.AtpSolver do
 
     {:error,
      "Isabelle backend filesystem error #{inspect(posix)} on " <>
-       location <> ". Check that the directory exists and " <>
+       location <>
+       ". Check that the directory exists and " <>
        "is writable, or pick a different one in the ATP Backend Configuration cell."}
   end
 
