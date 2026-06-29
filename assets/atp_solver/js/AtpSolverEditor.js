@@ -117,18 +117,17 @@ function statusBadge(status) {
 	return `<span class="inline-block px-3 py-1 text-sm font-semibold rounded border ${cls}">${escapeHtml(label)}</span>`;
 }
 
-function lemmaRow({ name, line, kind, status, message }) {
+function lemmaRow({ name, kind, status, message }) {
 	const cell = (text) => `<td class="px-3 py-1.5 align-top">${text}</td>`;
 	const nameCell = name
 		? `<span class="font-mono">${escapeHtml(name)}</span>`
 		: '<span class="text-gray-400 italic">(anonymous)</span>';
-	const lineCell = line == null ? '—' : line;
 	const resultCell =
 		kind === 'ok'
 			? statusBadge(status)
 			: `<span class="text-red-600 text-xs whitespace-pre-wrap">${escapeHtml(message ?? '')}</span>`;
 
-	return `<tr class="border-t border-gray-200">${cell(nameCell)}${cell(`<span class="font-mono text-gray-500">${lineCell}</span>`)}${cell(resultCell)}</tr>`;
+	return `<tr class="border-t border-gray-200">${cell(nameCell)}${cell(resultCell)}</tr>`;
 }
 
 function lemmaTable(lemmas) {
@@ -136,7 +135,7 @@ function lemmaTable(lemmas) {
 	return `
 		<table class="w-full text-sm">
 			<thead class="text-xs uppercase tracking-wide text-gray-500">
-				<tr><th class="text-left px-3 py-1">Lemma</th><th class="text-left px-3 py-1">Line</th><th class="text-left px-3 py-1">Result</th></tr>
+				<tr><th class="text-left px-3 py-1">Lemma</th><th class="text-left px-3 py-1">Result</th></tr>
 			</thead>
 			<tbody class="bg-white">${rows}</tbody>
 		</table>`;

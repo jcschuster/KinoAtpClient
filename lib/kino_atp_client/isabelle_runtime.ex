@@ -59,9 +59,9 @@ defmodule KinoAtpClient.IsabelleRuntime do
     * `:proof_method` — Isabelle tactic appended after each generated `lemma`
       (default `"by auto"`).
 
-  Returns `{:ok, [%{line:, name:, result:}]}` on success or
-  `{:error, reason}` if Isabelle is unavailable, the TPTP fragment failed to
-  parse, or the server reported a task failure.
+  Returns `{:ok, [%{name:, result:}]}` on success or `{:error, reason}` if
+  Isabelle is unavailable, the TPTP fragment failed to parse, or the
+  server reported a task failure.
   """
   @spec query_tptp(String.t(), keyword()) ::
           {:ok, [ResultNormalization.lemma_result()]} | {:error, term()}
@@ -183,6 +183,7 @@ defmodule KinoAtpClient.IsabelleRuntime do
     with {:ok, isabellized} <- safe_isabellize(problem) do
       body = build_body(isabellized, proof_method)
       name = derive_name(problem)
+      specs = AtpClient.Isabelle.lemma_specs(body)
 
       case IsabelleClient.check_text(
              client,
@@ -192,10 +193,17 @@ defmodule KinoAtpClient.IsabelleRuntime do
              @check_timeout
            ) do
         {:ok, %IsabelleClient.Task{status: :finished, result: %{} = payload}} ->
-          # check_text writes `theory <name> imports … begin\n<body>\nend`, so
-          # body line 1 = source file line 2 → subtract 1 to map Isabelle
-          # positions back to the user's text.
-          {:ok, ResultNormalization.per_lemma_results(payload, line_offset: 1)}
+          # check_text wraps the body with `theory <name> imports … begin\n`,
+          # shifting every body line down by one. Pass that as `:line_offset`
+          # and filter to the user's `.thy` so messages emitted from the
+          # bundled `TPTP.thy` are not bucketed into nearby lemma ranges.
+          {:ok,
+           ResultNormalization.per_lemma_results(
+             payload,
+             specs,
+             file: "/" <> name <> ".thy",
+             line_offset: 1
+           )}
 
         {:error, %IsabelleClient.Task{status: :failed, result: payload}} ->
           {:error, {:isabelle_failed, payload}}

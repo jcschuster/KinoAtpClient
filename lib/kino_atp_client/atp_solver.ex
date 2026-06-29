@@ -263,12 +263,12 @@ defmodule KinoAtpClient.AtpSolver do
 
   defp atp_result_event({:error, reason}), do: error_event(reason)
 
-  defp lemma_payload(%{line: line, name: name, result: {:ok, status}}) when is_atom(status) do
-    %{"line" => line, "name" => name, "kind" => "ok", "status" => Atom.to_string(status)}
+  defp lemma_payload(%{name: name, result: {:ok, status}}) when is_atom(status) do
+    %{"name" => name, "kind" => "ok", "status" => Atom.to_string(status)}
   end
 
-  defp lemma_payload(%{line: line, name: name, result: {:error, reason}}) do
-    %{"line" => line, "name" => name, "kind" => "error", "message" => format_reason(reason)}
+  defp lemma_payload(%{name: name, result: {:error, reason}}) do
+    %{"name" => name, "kind" => "error", "message" => format_reason(reason)}
   end
 
   defp error_event(reason),
