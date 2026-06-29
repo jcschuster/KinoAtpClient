@@ -31,7 +31,7 @@ function fieldDisplayValue(field, raw) {
 
 // ─── Field renderers (per type) ───────────────────────────────────────────
 
-function renderField(field, value) {
+function renderField(field, value, pickerMode) {
 	const id = `atp-cfg-${field.key}`;
 	const required = field.required
 		? ' <span class="text-red-600" title="Required">*</span>'
@@ -46,16 +46,19 @@ function renderField(field, value) {
 		? `<p class="mt-1 text-xs text-gray-500 leading-snug">${escapeHtml(field.doc)}</p>`
 		: '';
 
-	const widget = renderWidget(field, value, id);
+	const widget = renderWidget(field, value, id, pickerMode);
 
 	return `<div class="mb-3">${label}${widget}${doc}</div>`;
 }
 
-function isPathField(field) {
-	return field.type === 'string' && field.key.endsWith('_dir');
+function pickerModeFor(field, backend, fileFields) {
+	if (field.type !== 'string') return null;
+	if ((fileFields?.[backend] ?? []).includes(field.key)) return 'file';
+	if (field.key.endsWith('_dir')) return 'dir';
+	return null;
 }
 
-function renderWidget(field, value, id) {
+function renderWidget(field, value, id, pickerMode) {
 	const display = fieldDisplayValue(field, value);
 	const baseCls =
 		'w-full p-2 text-sm border border-gray-300 rounded bg-white outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500';
@@ -76,11 +79,12 @@ function renderWidget(field, value, id) {
 		case 'string':
 		default: {
 			const inputType = field.secret ? 'password' : 'text';
-			if (isPathField(field)) {
+			if (pickerMode) {
+				const icon = pickerMode === 'file' ? '📄' : '📁';
 				return `
 					<div class="flex gap-2">
 						<input id="${id}" data-atp-field="${field.key}" data-atp-type="string" type="text" value="${escapeHtml(display)}" class="${baseCls} flex-1" autocomplete="off">
-						<button type="button" data-atp-browse="${field.key}" class="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded cursor-pointer hover:bg-gray-100 whitespace-nowrap transition-colors">📁 Browse…</button>
+						<button type="button" data-atp-browse="${field.key}" data-atp-browse-mode="${pickerMode}" class="px-3 py-2 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded cursor-pointer hover:bg-gray-100 whitespace-nowrap transition-colors">${icon} Browse…</button>
 					</div>
 					<div data-atp-picker="${field.key}" class="hidden mt-2 border border-gray-300 rounded bg-white"></div>`;
 			}
@@ -91,23 +95,27 @@ function renderWidget(field, value, id) {
 
 // ─── Folder picker panel ──────────────────────────────────────────────────
 
-function renderPicker(state) {
+function renderPicker(state, mode) {
 	if (!state) {
 		return '<div class="p-3 text-xs text-gray-500 italic">Loading…</div>';
 	}
 
 	const { path, parent, entries, error, drives } = state;
 	const upDisabled = parent == null ? ' opacity-40 cursor-not-allowed' : '';
+	const fileMode = mode === 'file';
+
+	const visible = fileMode
+		? entries
+		: entries.filter((entry) => entry.type !== 'file');
+
+	const emptyMessage = fileMode
+		? '(empty directory)'
+		: '(no subdirectories)';
 
 	const entryItems =
-		entries.length === 0
-			? `<li class="px-3 py-2 text-xs text-gray-400 italic">${error ? '' : '(no subdirectories)'}</li>`
-			: entries
-					.map(
-						(entry) =>
-							`<li><button type="button" data-atp-picker-nav="${escapeHtml(entry.name)}" class="w-full text-left px-3 py-1.5 text-xs font-mono cursor-pointer hover:bg-blue-50 border-none bg-transparent">📁 ${escapeHtml(entry.name)}</button></li>`,
-					)
-					.join('');
+		visible.length === 0
+			? `<li class="px-3 py-2 text-xs text-gray-400 italic">${error ? '' : emptyMessage}</li>`
+			: visible.map((entry) => renderPickerEntry(entry)).join('');
 
 	const errorBanner = error
 		? `<div class="px-3 py-2 text-xs text-red-700 bg-red-50 border-b border-red-200">${escapeHtml(error)}</div>`
@@ -129,6 +137,16 @@ function renderPicker(state) {
 				</div>`
 			: '';
 
+	const footer = fileMode
+		? `<div class="flex items-center gap-2 px-3 py-2 border-t border-gray-200 bg-gray-50">
+				<span class="flex-1 text-xs text-gray-500 italic">Click a file to select it.</span>
+				<button type="button" data-atp-picker-cancel class="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded cursor-pointer hover:bg-gray-100">Cancel</button>
+			</div>`
+		: `<div class="flex items-center gap-2 px-3 py-2 border-t border-gray-200 bg-gray-50">
+				<button type="button" data-atp-picker-select class="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border-none rounded cursor-pointer hover:bg-blue-700">Select this folder</button>
+				<button type="button" data-atp-picker-cancel class="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded cursor-pointer hover:bg-gray-100">Cancel</button>
+			</div>`;
+
 	return `
 		${drivesBar}
 		<div class="flex items-center gap-2 px-3 py-2 border-b border-gray-200 bg-gray-50">
@@ -138,10 +156,14 @@ function renderPicker(state) {
 		</div>
 		${errorBanner}
 		<ul class="m-0 p-0 list-none max-h-56 overflow-y-auto">${entryItems}</ul>
-		<div class="flex items-center gap-2 px-3 py-2 border-t border-gray-200 bg-gray-50">
-			<button type="button" data-atp-picker-select class="px-3 py-1.5 text-xs font-medium text-white bg-blue-600 border-none rounded cursor-pointer hover:bg-blue-700">Select this folder</button>
-			<button type="button" data-atp-picker-cancel class="px-3 py-1.5 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded cursor-pointer hover:bg-gray-100">Cancel</button>
-		</div>`;
+		${footer}`;
+}
+
+function renderPickerEntry(entry) {
+	const isFile = entry.type === 'file';
+	const icon = isFile ? '📄' : '📁';
+	const action = isFile ? 'data-atp-picker-file' : 'data-atp-picker-nav';
+	return `<li><button type="button" ${action}="${escapeHtml(entry.name)}" class="w-full text-left px-3 py-1.5 text-xs font-mono cursor-pointer hover:bg-blue-50 border-none bg-transparent">${icon} ${escapeHtml(entry.name)}</button></li>`;
 }
 
 // ─── Section + form layout ────────────────────────────────────────────────
@@ -154,10 +176,16 @@ function groupFields(schema) {
 	return groups;
 }
 
-function renderSection(group, fields, values, backend) {
+function renderSection(group, fields, values, backend, fileFields) {
 	if (!fields.length) return '';
 	const inner = fields
-		.map((f) => renderField(f, fieldValue(values, backend, f.key)))
+		.map((f) =>
+			renderField(
+				f,
+				fieldValue(values, backend, f.key),
+				pickerModeFor(f, backend, fileFields),
+			),
+		)
 		.join('');
 
 	if (group === 'advanced') {
@@ -175,9 +203,11 @@ function renderSection(group, fields, values, backend) {
 		</section>`;
 }
 
-function renderForm(schema, values, backend) {
+function renderForm(schema, values, backend, fileFields) {
 	const groups = groupFields(schema);
-	return GROUP_ORDER.map((g) => renderSection(g, groups[g], values, backend)).join('');
+	return GROUP_ORDER.map((g) =>
+		renderSection(g, groups[g], values, backend, fileFields),
+	).join('');
 }
 
 // ─── UI-only extras (e.g. "skip TLS verification") ────────────────────────
@@ -301,13 +331,16 @@ export default class BackendConfigForm {
 	}
 
 	_renderForm() {
-		const { backend, values, schemas, notices, ui_extras } = this._payload;
+		const { backend, values, schemas, notices, ui_extras, file_fields } =
+			this._payload;
 		const schema = schemas[backend] ?? [];
 		const notice = notices?.[backend];
 		const noticeHtml = notice ? renderNotice(notice) : '';
 		const extras = ui_extras?.[backend] ?? [];
 		this._q('[data-atp="form"]').innerHTML =
-			noticeHtml + renderForm(schema, values, backend) + renderExtras(extras, values, backend);
+			noticeHtml +
+			renderForm(schema, values, backend, file_fields) +
+			renderExtras(extras, values, backend);
 	}
 
 	_renderStatus() {
@@ -358,7 +391,7 @@ export default class BackendConfigForm {
 
 		const browseKey = target.dataset?.atpBrowse;
 		if (browseKey) {
-			this._openPicker(browseKey);
+			this._openPicker(browseKey, target.dataset.atpBrowseMode || 'dir');
 			return;
 		}
 
@@ -366,11 +399,16 @@ export default class BackendConfigForm {
 		if (!pickerEl) return;
 
 		const key = pickerEl.dataset.atpPicker;
-		const state = this._pickers[key];
+		const entry = this._pickers[key];
+		const state = entry?.state;
 
 		if (target.dataset.atpPickerNav != null) {
 			const next = `${state?.path ?? ''}/${target.dataset.atpPickerNav}`;
 			this._requestListing(key, next);
+		} else if (target.dataset.atpPickerFile != null) {
+			if (state?.path) {
+				this._selectPickerPath(key, `${state.path}/${target.dataset.atpPickerFile}`);
+			}
 		} else if (target.dataset.atpPickerGoto != null) {
 			this._requestListing(key, target.dataset.atpPickerGoto);
 		} else if (target.hasAttribute('data-atp-picker-up')) {
@@ -384,12 +422,12 @@ export default class BackendConfigForm {
 		}
 	}
 
-	_openPicker(key) {
+	_openPicker(key, mode) {
 		const pickerEl = this._q(`[data-atp-picker="${key}"]`);
 		if (!pickerEl) return;
 		pickerEl.classList.remove('hidden');
-		this._pickers[key] = null;
-		pickerEl.innerHTML = renderPicker(null);
+		this._pickers[key] = { mode, state: null };
+		pickerEl.innerHTML = renderPicker(null, mode);
 		const current = fieldValue(this._payload.values, this._payload.backend, key);
 		this._requestListing(key, current);
 	}
@@ -414,9 +452,10 @@ export default class BackendConfigForm {
 		const { backend, key } = listing;
 		if (backend !== this._payload.backend) return;
 		if (!(key in this._pickers)) return;
-		this._pickers[key] = listing;
+		const entry = this._pickers[key] ?? { mode: 'dir', state: null };
+		this._pickers[key] = { mode: entry.mode, state: listing };
 		const pickerEl = this._q(`[data-atp-picker="${key}"]`);
-		if (pickerEl) pickerEl.innerHTML = renderPicker(listing);
+		if (pickerEl) pickerEl.innerHTML = renderPicker(listing, entry.mode);
 	}
 
 	_selectPickerPath(key, path) {

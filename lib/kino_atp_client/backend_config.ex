@@ -34,6 +34,14 @@ defmodule KinoAtpClient.BackendConfig do
     ]
   }
 
+  # Per-backend `config_schema/0` keys whose value is a path to a *file* (not a
+  # directory). The JS side renders the same Browse button as for `_dir` fields
+  # but switches the picker into file-selection mode (entries include files,
+  # clicking a file selects it).
+  @file_fields %{
+    "local_exec" => ["binary"]
+  }
+
   @impl true
   def init(attrs, ctx) do
     state = %{
@@ -43,6 +51,7 @@ defmodule KinoAtpClient.BackendConfig do
       schemas: schemas_payload(),
       notices: backend_notices(),
       ui_extras: @ui_extras,
+      file_fields: @file_fields,
       verify_task: nil,
       verify_status: nil
     }
@@ -74,13 +83,15 @@ defmodule KinoAtpClient.BackendConfig do
     {:noreply, assign(ctx, values: new_values, verify_status: nil)}
   end
 
-  # ─── Server-side folder picker ───────────────────────────────────────────
+  # ─── Server-side path picker ─────────────────────────────────────────────
   #
   # JS sends `list_dir` with the path it wants to browse (empty string ⇒ start
-  # from `$HOME` or cwd). We resolve the path, list its directory entries, and
-  # broadcast `dir_listing` back so the picker UI can render. The `:backend`
-  # and `:key` are echoed so the JS can route the response to the right field
-  # when several pickers are mounted simultaneously.
+  # from `$HOME` or cwd). We resolve the path, list its entries (directories
+  # and regular files, each tagged with a `"type"`), and broadcast `dir_listing`
+  # back so the picker UI can render. The JS side filters out files for fields
+  # that pick a folder. The `:backend` and `:key` are echoed so the JS can
+  # route the response to the right field when several pickers are mounted
+  # simultaneously.
   def handle_event(
         "list_dir",
         %{"backend" => backend, "key" => key, "path" => path},
@@ -196,8 +207,17 @@ defmodule KinoAtpClient.BackendConfig do
 
   defp resolve_browse_path(path) when is_binary(path) do
     case String.trim(path) do
-      "" -> System.user_home() || File.cwd!()
-      trimmed -> Path.expand(trimmed)
+      "" ->
+        System.user_home() || File.cwd!()
+
+      trimmed ->
+        expanded = Path.expand(trimmed)
+
+        case File.stat(expanded) do
+          {:ok, %{type: :directory}} -> expanded
+          {:ok, _} -> Path.dirname(expanded)
+          _ -> expanded
+        end
     end
   end
 
@@ -210,19 +230,26 @@ defmodule KinoAtpClient.BackendConfig do
 
     case File.ls(path) do
       {:ok, entries} ->
-        dirs =
+        classified =
           entries
-          |> Enum.filter(fn entry ->
-            not String.starts_with?(entry, ".") and
-              directory?(Path.join(path, entry))
-          end)
-          |> Enum.sort()
-          |> Enum.map(&%{"name" => &1})
+          |> Enum.reject(&String.starts_with?(&1, "."))
+          |> Enum.map(fn name -> {name, entry_type(Path.join(path, name))} end)
+          |> Enum.filter(fn {_, type} -> type != nil end)
+          |> Enum.sort_by(fn {name, type} -> {type == "file", name} end)
+          |> Enum.map(fn {name, type} -> %{"name" => name, "type" => type} end)
 
-        Map.merge(base, %{"entries" => dirs, "error" => nil})
+        Map.merge(base, %{"entries" => classified, "error" => nil})
 
       {:error, reason} ->
         Map.merge(base, %{"entries" => [], "error" => posix_message(reason, path)})
+    end
+  end
+
+  defp entry_type(path) do
+    case File.stat(path) do
+      {:ok, %{type: :directory}} -> "dir"
+      {:ok, %{type: :regular}} -> "file"
+      _ -> nil
     end
   end
 
@@ -240,13 +267,6 @@ defmodule KinoAtpClient.BackendConfig do
 
       _ ->
         []
-    end
-  end
-
-  defp directory?(path) do
-    case File.stat(path) do
-      {:ok, %{type: :directory}} -> true
-      _ -> false
     end
   end
 
