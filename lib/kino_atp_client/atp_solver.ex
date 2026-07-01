@@ -275,6 +275,16 @@ defmodule KinoAtpClient.AtpSolver do
     do: {:broadcast, "preview_error", %{"message" => format_reason(reason)}}
 
   defp format_reason(reason) when is_binary(reason), do: reason
+  defp format_reason(:internal_error), do: "Prover reported an internal error."
+  defp format_reason(:input_error), do: "Prover rejected the input as malformed."
+
+  defp format_reason({:prover_not_found, exe}) when is_binary(exe),
+    do: "Prover executable not found on PATH: #{exe}"
+
+  defp format_reason({:unrecognized_output, output}) when is_binary(output) do
+    "Prover finished without a recognisable SZS status. Raw output:\n\n" <> output
+  end
+
   defp format_reason(reason), do: inspect(reason, pretty: true, width: 80)
 
   # ─── Task lifecycle helpers ──────────────────────────────────────────────

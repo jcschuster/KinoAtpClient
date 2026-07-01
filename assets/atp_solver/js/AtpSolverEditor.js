@@ -85,36 +85,180 @@ const BACKEND_CONTROLS = {
 
 // ─── Result rendering ─────────────────────────────────────────────────────
 
+// Keyed by the SZS-faithful snake_case atoms `AtpClient.ResultNormalization`
+// produces (see the ontology at
+// https://tptp.org/Seminars/SZSOntologies/Summary.html). Any atom the
+// classifier surfaces without an entry here falls through to a neutral badge
+// via `titleCase(status)` in `statusBadge` — so newly recognised SZS names
+// (e.g. `equivalent_theorem`) render sensibly without a code change.
+const SUCCESS_GREEN = ['bg-green-100', 'text-green-800', 'border-green-300'];
+const SUCCESS_BLUE = ['bg-blue-100', 'text-blue-800', 'border-blue-300'];
+const COUNTER_AMBER = ['bg-amber-100', 'text-amber-800', 'border-amber-300'];
+const NEUTRAL_GRAY = ['bg-gray-100', 'text-gray-700', 'border-gray-300'];
+const WARN_ORANGE = ['bg-orange-100', 'text-orange-800', 'border-orange-300'];
+const ERROR_RED = ['bg-red-100', 'text-red-800', 'border-red-300'];
+
 const STATUS_STYLES = {
-	thm: ['bg-green-100', 'text-green-800', 'border-green-300'],
-	sat: ['bg-blue-100', 'text-blue-800', 'border-blue-300'],
-	csat: ['bg-amber-100', 'text-amber-800', 'border-amber-300'],
-	gave_up: ['bg-gray-100', 'text-gray-700', 'border-gray-300'],
-	timeout: ['bg-orange-100', 'text-orange-800', 'border-orange-300'],
-	out_of_resources: ['bg-orange-100', 'text-orange-800', 'border-orange-300'],
-	interrupted: ['bg-gray-100', 'text-gray-700', 'border-gray-300'],
+	// Success — conjecture-proving verdicts.
+	theorem: SUCCESS_GREEN,
+	tautology: SUCCESS_GREEN,
+	tautologous_conclusion: SUCCESS_GREEN,
+	weaker_conclusion: SUCCESS_GREEN,
+	equivalent: SUCCESS_GREEN,
+	// Success — model-existence verdicts.
+	unsatisfiable: SUCCESS_GREEN,
+	satisfiable: SUCCESS_BLUE,
+	equi_satisfiable: SUCCESS_BLUE,
+	// Success — disproving / anti-verdicts (the goal did not hold).
+	counter_satisfiable: COUNTER_AMBER,
+	counter_theorem: COUNTER_AMBER,
+	counter_equivalent: COUNTER_AMBER,
+	equivalent_counter_theorem: COUNTER_AMBER,
+	contradictory_axioms: COUNTER_AMBER,
+	no_consequence: NEUTRAL_GRAY,
+	// NoSuccess — prover finished without a verdict.
+	gave_up: NEUTRAL_GRAY,
+	unknown: NEUTRAL_GRAY,
+	incomplete: NEUTRAL_GRAY,
+	forced: NEUTRAL_GRAY,
+	user: NEUTRAL_GRAY,
+	inappropriate: NEUTRAL_GRAY,
+	timeout: WARN_ORANGE,
+	resource_out: WARN_ORANGE,
+	memory_out: WARN_ORANGE,
+	error: ERROR_RED,
+	input_error: ERROR_RED,
 };
 
+// SZS Ontology entries, verbatim from https://tptp.org/UserDocs/SZSOntology/.
+// Keys are the snake_case atoms `AtpClient.ResultNormalization` produces;
+// values pair the canonical CamelCase tag with a one-line gloss that the
+// badge exposes as a `title` tooltip — the ontology's own vocabulary is
+// unfamiliar to newcomers from the general Elixir ecosystem, so the tag
+// is documented right where the verdict is displayed.
 const STATUS_LABELS = {
-	thm: '✓ Theorem',
-	sat: '✓ Satisfiable',
-	csat: '↯ Counter-satisfiable',
-	gave_up: '? Gave up',
-	timeout: '⏱ Timeout',
-	out_of_resources: '⚠ Out of resources',
-	interrupted: '⏹ Interrupted',
+	theorem: {
+		tag: 'Theorem',
+		hint: 'The conjecture follows from the axioms.',
+	},
+	tautology: {
+		tag: 'Tautology',
+		hint: 'The conjecture is true in every interpretation.',
+	},
+	tautologous_conclusion: {
+		tag: 'TautologousConclusion',
+		hint: 'The conclusion is a tautology (independent of the axioms).',
+	},
+	weaker_conclusion: {
+		tag: 'WeakerConclusion',
+		hint: 'The axioms entail something strictly stronger than the conclusion.',
+	},
+	equivalent: {
+		tag: 'Equivalent',
+		hint: 'The axioms and the conjecture are logically equivalent.',
+	},
+	unsatisfiable: {
+		tag: 'Unsatisfiable',
+		hint: 'The clause set has no model — in a refutation pipeline this is the proof of the original conjecture.',
+	},
+	satisfiable: {
+		tag: 'Satisfiable',
+		hint: 'The clause set has a model — in a refutation pipeline this refutes the goal.',
+	},
+	equi_satisfiable: {
+		tag: 'EquiSatisfiable',
+		hint: 'The axioms and the conjecture are satisfiable together or together unsatisfiable.',
+	},
+	counter_satisfiable: {
+		tag: 'CounterSatisfiable',
+		hint: 'The negation of the conjecture is satisfiable — i.e. the conjecture is disproven.',
+	},
+	counter_theorem: {
+		tag: 'CounterTheorem',
+		hint: 'The negation of the conjecture is a theorem of the axioms.',
+	},
+	counter_equivalent: {
+		tag: 'CounterEquivalent',
+		hint: 'The axioms are equivalent to the negation of the conjecture.',
+	},
+	equivalent_counter_theorem: {
+		tag: 'EquivalentCounterTheorem',
+		hint: 'The axioms are equivalent to some counter-theorem of the conjecture.',
+	},
+	contradictory_axioms: {
+		tag: 'ContradictoryAxioms',
+		hint: 'The axioms alone are inconsistent — anything follows. Usually a bug in the axiomatisation.',
+	},
+	no_consequence: {
+		tag: 'NoConsequence',
+		hint: 'Neither the conjecture nor its negation is a consequence of the axioms.',
+	},
+	gave_up: {
+		tag: 'GaveUp',
+		hint: 'Search exhausted with no proof found — try a different tactic or more time.',
+	},
+	unknown: {
+		tag: 'Unknown',
+		hint: 'The prover could not decide the input.',
+	},
+	incomplete: {
+		tag: 'Incomplete',
+		hint: 'The prover is incomplete for this fragment and cannot rule the input out.',
+	},
+	forced: {
+		tag: 'Forced',
+		hint: 'The run was terminated by an external signal.',
+	},
+	user: {
+		tag: 'User',
+		hint: 'The user interrupted the run.',
+	},
+	inappropriate: {
+		tag: 'Inappropriate',
+		hint: 'The input is not in the fragment the prover accepts (e.g. THF sent to a FOF-only solver).',
+	},
+	timeout: {
+		tag: 'Timeout',
+		hint: 'The prover exceeded the wall-clock / cpu time budget.',
+	},
+	resource_out: {
+		tag: 'ResourceOut',
+		hint: 'The prover exceeded a resource budget other than time or memory.',
+	},
+	memory_out: {
+		tag: 'MemoryOut',
+		hint: 'The prover exceeded its memory budget.',
+	},
+	error: {
+		tag: 'Error',
+		hint: 'The prover reported an error — check the raw output.',
+	},
+	input_error: {
+		tag: 'InputError',
+		hint: 'The prover rejected the input as malformed.',
+	},
 };
+
+// snake_case → CamelCase for atoms the classifier surfaces via its
+// permissive pass-through (`% SZS status <CamelCase>` → snake_case atom).
+// Applied only when STATUS_LABELS has no explicit entry, so the badge
+// still reads like an SZS tag.
+function szsCamelCase(status) {
+	return String(status)
+		.split('_')
+		.map((word) => (word ? word[0].toUpperCase() + word.slice(1) : word))
+		.join('');
+}
+
+const SZS_ONTOLOGY_URL = 'https://tptp.org/UserDocs/SZSOntology/';
 
 function statusBadge(status) {
-	const label = STATUS_LABELS[status] || status;
-	const cls = (
-		STATUS_STYLES[status] || [
-			'bg-gray-100',
-			'text-gray-700',
-			'border-gray-300',
-		]
-	).join(' ');
-	return `<span class="inline-block px-3 py-1 text-sm font-semibold rounded border ${cls}">${escapeHtml(label)}</span>`;
+	const entry = STATUS_LABELS[status];
+	const label = entry?.tag || szsCamelCase(status);
+	const hint = entry?.hint || 'SZS status passed through from the prover.';
+	const title = `${label} — ${hint}\n\nSZS Ontology: ${SZS_ONTOLOGY_URL}`;
+	const cls = (STATUS_STYLES[status] || NEUTRAL_GRAY).join(' ');
+	return `<span class="inline-block px-3 py-1 text-sm font-semibold rounded border cursor-help ${cls}" title="${escapeHtml(title)}">${escapeHtml(label)}</span>`;
 }
 
 function lemmaRow({ name, kind, status, message }) {
