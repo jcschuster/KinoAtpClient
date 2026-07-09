@@ -15,7 +15,7 @@ Advanced. Click **Verify connection** to call the backend's `verify/1` callback
 before depending on its settings.
 
 For Isabelle in particular: if the `isabelle` executable is on `PATH` (or
-`ISABELLE_TOOL` is set), leave every field blank — the cell will auto-spawn a
+`ISABELLE_TOOL` is set, see the section on the zero-config path below), leave every field blank — the cell will auto-spawn a
 local server and reuse one `HOL` session across solves. Fill in `host`, `port`,
 `password`, etc. only when targeting a remote `isabelle server`.
 
@@ -57,6 +57,14 @@ end
 With a local `isabelle` on `PATH`, the same TPTP problem runs against the
 auto-managed session. Switching the backend dropdown to `Isabelle` swaps the
 header controls (proof method picker) and the result panel (per-lemma table).
+
+In case there are issues loading the `PATH` or `ISABELLE_TOOL` environment variables (e.g., the Livebook Desktop release for MacOS does not load these variables), you can update these from this Elixir runtime by executing the following line in a code cell:
+
+<!-- livebook:{"force_markdown":true} -->
+
+```elixir
+System.put_env("ISABELLE_TOOL", "/path/to/isabelle/binary")
+```
 
 <!-- livebook:{"attrs":"eyJiYWNrZW5kIjoiaXNhYmVsbGUiLCJwcm9ibGVtX3N0ciI6InRoZihhLCBjb25qZWN0dXJlLCAhW1A6JG9dOiAoUCA9PiB+UCkpLlxyXG50aGYoYiwgY29uamVjdHVyZSwgIVtQOiRvXTogKFAgPT4gUCkpLiIsInByb29mX21ldGhvZCI6InRyeSBvb3BzIiwic3lzdGVtIjoiQWx0LUVyZ28tLS0wLjk1LjIiLCJ0aGVtZSI6IkRyYWN1bGEiLCJ0aW1lX2xpbWl0IjoxNSwidHB0cDR4X2VuYWJsZWQiOmZhbHNlfQ","chunks":null,"kind":"Elixir.KinoAtpClient.AtpSolver","livebook_object":"smart_cell"} -->
 
