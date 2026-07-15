@@ -18,6 +18,7 @@ defmodule KinoAtpClient.AtpSolver do
   use Kino.JS.Live
   use Kino.SmartCell, name: "ATP Solver"
 
+  alias AtpClient.Config
   alias AtpClient.Lint
   alias AtpClient.Lint.Report
   alias AtpClient.SystemOnTptp
@@ -236,10 +237,7 @@ defmodule KinoAtpClient.AtpSolver do
   defp annotate_remote_isabelle_error({:error, posix})
        when posix in [:enoent, :eacces, :eisdir, :enotdir, :erofs, :enospc, :eperm] do
     location =
-      case Application.get_env(:atp_client, :isabelle, []) |> Keyword.get(:local_dir) do
-        nil -> "the auto-managed Isabelle theory directory under " <> inspect(System.tmp_dir!())
-        dir -> "local_dir=" <> inspect(dir)
-      end
+      "local_dir=" <> inspect(Config.get(:isabelle) |> Keyword.fetch!(:local_dir))
 
     {:error,
      "Isabelle backend filesystem error #{inspect(posix)} on " <>
@@ -281,9 +279,32 @@ defmodule KinoAtpClient.AtpSolver do
   defp format_reason({:prover_not_found, exe}) when is_binary(exe),
     do: "Prover executable not found on PATH: #{exe}"
 
-  defp format_reason({:unrecognized_output, output}) when is_binary(output) do
-    "Prover finished without a recognisable SZS status. Raw output:\n\n" <> output
-  end
+  defp format_reason({:unrecognized_output, output}) when is_binary(output),
+    do: "Prover finished without a recognisable SZS status. Raw output:\n\n" <> output
+
+  defp format_reason({:tptp_parse, msg}) when is_binary(msg),
+    do: "Failed to parse the TPTP problem: " <> msg
+
+  defp format_reason({:tptp_thy_copy_failed, reason}),
+    do: "Failed to install the TPTP support theory: " <> inspect(reason)
+
+  # AtpClient.Isabelle.prove_tptp/3 annotates "Cannot load theory file" failures
+  # with a keyword list whose first entry is `{:hint, explanation}`.
+  defp format_reason({:isabelle_failed, _payload, [{:hint, hint} | _]}) when is_binary(hint),
+    do: hint
+
+  defp format_reason({:isabelle_failed, %{"message" => msg}, _}) when is_binary(msg),
+    do: "Isabelle server error: " <> msg
+
+  defp format_reason({:isabelle_failed, _, _}),
+    do: "Isabelle server reported a task failure."
+
+  # 2-tuple variant produced by KinoAtpClient.IsabelleRuntime.
+  defp format_reason({:isabelle_failed, %{"message" => msg}}) when is_binary(msg),
+    do: "Isabelle server error: " <> msg
+
+  defp format_reason({:isabelle_failed, _}),
+    do: "Isabelle server reported a task failure."
 
   defp format_reason(reason), do: inspect(reason, pretty: true, width: 80)
 

@@ -19,7 +19,7 @@ defmodule KinoAtpClient do
 
   ## Usage
 
-      Mix.install([{:kino_atp_client, "~> 0.5"}])
+      Mix.install([{:kino_atp_client, "~> 0.6"}])
 
   After installation, both Smart Cells appear in the Livebook cell picker.
   Insert an "ATP Backend Configuration" cell first to set credentials, then
