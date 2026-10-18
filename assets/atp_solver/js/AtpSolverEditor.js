@@ -85,7 +85,7 @@ const BACKEND_CONTROLS = {
 
 // ─── Result rendering ─────────────────────────────────────────────────────
 
-// Keyed by the SZS-faithful snake_case atoms `AtpClient.ResultNormalization`
+// Keyed by the SZS-faithful snake_case atoms `Tptp.Szs.Ontology`
 // produces (see the ontology at
 // https://tptp.org/Seminars/SZSOntologies/Summary.html). Any atom the
 // classifier surfaces without an entry here falls through to a neutral badge
@@ -131,7 +131,7 @@ const STATUS_STYLES = {
 };
 
 // SZS Ontology entries, verbatim from https://tptp.org/UserDocs/SZSOntology/.
-// Keys are the snake_case atoms `AtpClient.ResultNormalization` produces;
+// Keys are the snake_case atoms `Tptp.Szs.Ontology` produces;
 // values pair the canonical CamelCase tag with a one-line gloss that the
 // badge exposes as a `title` tooltip — the ontology's own vocabulary is
 // unfamiliar to newcomers from the general Elixir ecosystem, so the tag

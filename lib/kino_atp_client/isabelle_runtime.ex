@@ -5,7 +5,7 @@ defmodule KinoAtpClient.IsabelleRuntime do
   the `isabelle_elixir` livebooks: spawn a local server, open one session,
   load the bundled `TPTP.thy`, and re-use both across calls.
 
-  Compared with `AtpClient.Isabelle.query_tptp/2`, this:
+  Compared with `AtpClient.Isabelle.query/2`, this:
 
     * **needs zero configuration** when the `isabelle` executable is on
       `PATH` (or `ISABELLE_TOOL` is set) — no `:password`, no `:local_dir`,
@@ -17,13 +17,14 @@ defmodule KinoAtpClient.IsabelleRuntime do
       always agree on where the theory lives.
 
   The runtime is started as a permanent child of the package's application
-  supervision tree but stays *idle* until the first `query_tptp/2` call — no
+  supervision tree but stays *idle* until the first `query/2` call — no
   Isabelle process is spawned just by loading the package.
   """
 
   use GenServer
 
-  alias AtpClient.ResultNormalization
+  alias AtpClient.Isabelle.Verdict
+  alias AtpClient.Result
   alias IsabelleClient.{Server, TPTP}
 
   @session "HOL"
@@ -52,21 +53,21 @@ defmodule KinoAtpClient.IsabelleRuntime do
 
   @doc """
   Checks a TPTP/THF `problem` against the auto-managed local Isabelle session
-  and returns the per-lemma classification.
+  and returns the result in the shape of `AtpClient.Isabelle.query/2`.
 
   `opts`:
 
     * `:proof_method` — Isabelle tactic appended after each generated `lemma`
       (default `"by auto"`).
 
-  Returns `{:ok, [%{name:, result:}]}` on success or `{:error, reason}` if
-  Isabelle is unavailable, the TPTP fragment failed to parse, or the
-  server reported a task failure.
+  Returns `{:ok, %AtpClient.Result{}}` whose `status` is the weakest link over
+  the lemmas and whose `details.lemmas` holds each `%{name:, status:}`, or
+  `{:error, reason}` if Isabelle is unavailable, the TPTP fragment failed to
+  parse, or the server reported a task failure.
   """
-  @spec query_tptp(String.t(), keyword()) ::
-          {:ok, [ResultNormalization.lemma_result()]} | {:error, term()}
-  def query_tptp(problem, opts \\ []) when is_binary(problem) do
-    GenServer.call(__MODULE__, {:query_tptp, problem, opts}, :infinity)
+  @spec query(String.t(), keyword()) :: {:ok, Result.t()} | {:error, term()}
+  def query(problem, opts \\ []) when is_binary(problem) do
+    GenServer.call(__MODULE__, {:query, problem, opts}, :infinity)
   end
 
   @doc """
@@ -86,7 +87,7 @@ defmodule KinoAtpClient.IsabelleRuntime do
   end
 
   @impl true
-  def handle_call({:query_tptp, problem, opts}, _from, state) do
+  def handle_call({:query, problem, opts}, _from, state) do
     case ensure_session(state) do
       {:ok, ready_state} ->
         {:reply, run_query(ready_state.client, problem, opts), ready_state}
@@ -197,13 +198,9 @@ defmodule KinoAtpClient.IsabelleRuntime do
           # shifting every body line down by one. Pass that as `:line_offset`
           # and filter to the user's `.thy` so messages emitted from the
           # bundled `TPTP.thy` are not bucketed into nearby lemma ranges.
-          {:ok,
-           ResultNormalization.per_lemma_results(
-             payload,
-             specs,
-             file: "/" <> name <> ".thy",
-             line_offset: 1
-           )}
+          payload
+          |> Verdict.per_lemma(specs, file: "/" <> name <> ".thy", line_offset: 1)
+          |> to_result(payload)
 
         {:error, %IsabelleClient.Task{status: :failed, result: payload}} ->
           {:error, {:isabelle_failed, payload}}
@@ -212,6 +209,29 @@ defmodule KinoAtpClient.IsabelleRuntime do
           {:error, reason}
       end
     end
+  end
+
+  # Mirrors the result `AtpClient.Isabelle.query/2` builds, so callers treat the
+  # local and the remote path alike.
+  defp to_result(lemmas, payload) do
+    {:ok,
+     %Result{
+       status: weakest(lemmas),
+       evidence: {:backend, AtpClient.Isabelle},
+       output: Verdict.text(payload),
+       backend: AtpClient.Isabelle,
+       details: %{lemmas: lemmas}
+     }}
+  end
+
+  # An empty lemma list means the isabellizer dropped the input (non-THF), not
+  # that everything was proved.
+  defp weakest([]), do: :gave_up
+
+  defp weakest(lemmas) do
+    Enum.find_value(lemmas, :theorem, fn %{status: status} ->
+      if status != :theorem, do: status
+    end)
   end
 
   defp build_body(isabellized, proof_method) do

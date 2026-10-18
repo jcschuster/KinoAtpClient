@@ -12,7 +12,8 @@ unified frontend over four automated theorem prover backends:
 Two cells ship in this package:
 
 - **ATP Solver** — Monaco-backed TPTP editor with a backend mode switch.
-  Live linting via `AtpClient.Lint.analyze/2`; output renders per backend
+  Live linting via `Tptp.analyze/2` (plus optional TPTP4X through
+  `AtpClient.Analyzer.Tptp4x`); output renders per backend
   (raw prover text for SoTPTP, SZS badge for StarExec/LocalExec, per-lemma
   table for Isabelle).
 
@@ -34,7 +35,7 @@ Two cells ship in this package:
 ```elixir
 def deps do
   [
-    {:kino_atp_client, "~> 0.6"}
+    {:kino_atp_client, "~> 0.8"}
   ]
 end
 ```
@@ -44,7 +45,7 @@ end
 Add `KinoAtpClient` to a Livebook:
 
 ```elixir
-Mix.install([{:kino_atp_client, "~> 0.6"}])
+Mix.install([{:kino_atp_client, "~> 0.8"}])
 ```
 
 Both Smart Cells then appear in the cell picker. Insert an "ATP Backend

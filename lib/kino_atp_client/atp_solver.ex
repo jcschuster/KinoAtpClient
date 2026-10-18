@@ -18,10 +18,15 @@ defmodule KinoAtpClient.AtpSolver do
   use Kino.JS.Live
   use Kino.SmartCell, name: "ATP Solver"
 
+  alias AtpClient.Analyzer.Tptp4x
   alias AtpClient.Config
-  alias AtpClient.Lint
-  alias AtpClient.Lint.Report
+  alias AtpClient.Result
+  alias AtpClient.System
   alias AtpClient.SystemOnTptp
+  alias Tptp.Analysis
+  alias Tptp.Diagnostic
+  alias Tptp.Printer.Canonical
+  alias Tptp.Span
 
   @default_backend "sotptp"
 
@@ -66,9 +71,17 @@ defmodule KinoAtpClient.AtpSolver do
   # ─── Async message handling ──────────────────────────────────────────────
 
   @impl true
+  # The systems agent starts from atp_client's shipped snapshot and refreshes
+  # itself in the background, so reading it here never blocks on tptp.org.
+  # The dropdown lists bare names (`"Vampire"`): SystemOnTPTP resolves a name
+  # to its latest advertised version, so saved cells survive version bumps.
   def handle_info(:fetch_solvers, ctx) do
-    SystemOnTptp.Provers.refresh_systems_list()
-    solvers = SystemOnTptp.list_provers()
+    solvers =
+      [capability: :prove]
+      |> SystemOnTptp.systems()
+      |> Enum.map(& &1.name)
+      |> Enum.uniq()
+
     selected = pick_solver(ctx.assigns.system, solvers)
 
     broadcast_event(ctx, "solvers_fetched", %{
@@ -80,15 +93,11 @@ defmodule KinoAtpClient.AtpSolver do
   end
 
   def handle_info(
-        {ref, {:lint_ok, %Report{} = report}},
+        {ref, {:lint_ok, payload}},
         %{assigns: %{lint_task: %Task{ref: ref}}} = ctx
       ) do
     Process.demonitor(ref, [:flush])
-
-    broadcast_event(ctx, "lint_result", %{
-      "diagnostics" => Enum.map(report.diagnostics, &Map.from_struct/1),
-      "symbols" => Enum.map(report.symbols, &Map.from_struct/1)
-    })
+    broadcast_event(ctx, "lint_result", payload)
 
     {:noreply, assign(ctx, lint_task: nil)}
   end
@@ -113,10 +122,13 @@ defmodule KinoAtpClient.AtpSolver do
     {:noreply, ctx}
   end
 
+  # Cells saved before the dropdown listed names hold an identifier such as
+  # `"E---3.5.1"`; `System.name/1` maps it to the name it now selects.
   defp pick_solver(current, []), do: current
 
   defp pick_solver(current, [first | _] = solvers) do
-    if current in solvers, do: current, else: first
+    name = System.name(current)
+    if name in solvers, do: name, else: first
   end
 
   # ─── User edits ──────────────────────────────────────────────────────────
@@ -135,14 +147,14 @@ defmodule KinoAtpClient.AtpSolver do
 
   def handle_event("check_syntax", %{"problem" => problem}, ctx) when is_binary(problem) do
     cancelled_ctx = cancel_task(ctx, :lint_task)
-    backends = if cancelled_ctx.assigns.tptp4x_enabled, do: [:local, :tptp4x], else: [:local]
+    tptp4x? = cancelled_ctx.assigns.tptp4x_enabled
 
     task =
       Task.async(fn ->
         try do
-          {:lint_ok, Lint.analyze(problem, backends: backends)}
+          {:lint_ok, lint(problem, tptp4x?)}
         rescue
-          _ -> {:lint_ok, %Report{diagnostics: [], symbols: []}}
+          _ -> {:lint_ok, %{"diagnostics" => [], "symbols" => []}}
         end
       end)
 
@@ -176,9 +188,9 @@ defmodule KinoAtpClient.AtpSolver do
   # a `broadcast_event/3` call.
 
   defp run_backend(%{backend: "sotptp", problem_str: prob, system: sys, time_limit: tl}) do
-    case SystemOnTptp.query_system(prob, sys, time_limit_sec: tl, raw: true) do
-      {:ok, body} ->
-        {:broadcast, "preview", %{"text" => body, "system" => sys}}
+    case SystemOnTptp.query_system(prob, sys, time_limit_sec: tl) do
+      {:ok, %Result{output: output, system: ran}} ->
+        {:broadcast, "preview", %{"text" => output, "system" => ran || sys}}
 
       {:error, reason} ->
         error_event(reason)
@@ -199,7 +211,7 @@ defmodule KinoAtpClient.AtpSolver do
 
   defp run_backend(%{backend: "isabelle", problem_str: prob, proof_method: method}) do
     case isabelle_query(prob, proof_method: method) do
-      {:ok, lemmas} ->
+      {:ok, %Result{details: %{lemmas: lemmas}}} ->
         {:broadcast, "lemma_results", %{"lemmas" => Enum.map(lemmas, &lemma_payload/1)}}
 
       {:error, reason} ->
@@ -209,24 +221,24 @@ defmodule KinoAtpClient.AtpSolver do
 
   # Dispatch order:
   #   1. The user explicitly configured a remote Isabelle (`:password` is set
-  #      in the Application env) → use `AtpClient.Isabelle.query_tptp/2`.
+  #      in the Application env) → use `AtpClient.Isabelle.query/2`.
   #   2. A local `isabelle` executable is available → use the auto-managed
   #      `KinoAtpClient.IsabelleRuntime` (no directory / password setup).
-  #   3. Neither → defer to `AtpClient.Isabelle.query_tptp/2` so its config
+  #   3. Neither → defer to `AtpClient.Isabelle.query/2` so its config
   #      error surfaces with the canonical "missing required setting"
   #      message.
   defp isabelle_query(problem, opts) do
     cond do
       remote_isabelle_configured?() ->
         problem
-        |> AtpClient.Isabelle.query_tptp(opts)
+        |> AtpClient.Isabelle.query(opts)
         |> annotate_remote_isabelle_error()
 
       KinoAtpClient.IsabelleRuntime.available?() == :ok ->
-        KinoAtpClient.IsabelleRuntime.query_tptp(problem, opts)
+        KinoAtpClient.IsabelleRuntime.query(problem, opts)
 
       true ->
-        AtpClient.Isabelle.query_tptp(problem, opts)
+        AtpClient.Isabelle.query(problem, opts)
     end
   end
 
@@ -255,18 +267,14 @@ defmodule KinoAtpClient.AtpSolver do
     |> is_binary()
   end
 
-  defp atp_result_event({:ok, status}) when is_atom(status) do
+  defp atp_result_event({:ok, %Result{status: status}}) do
     {:broadcast, "atp_result", %{"kind" => "ok", "status" => Atom.to_string(status)}}
   end
 
   defp atp_result_event({:error, reason}), do: error_event(reason)
 
-  defp lemma_payload(%{name: name, result: {:ok, status}}) when is_atom(status) do
+  defp lemma_payload(%{name: name, status: status}) do
     %{"name" => name, "kind" => "ok", "status" => Atom.to_string(status)}
-  end
-
-  defp lemma_payload(%{name: name, result: {:error, reason}}) do
-    %{"name" => name, "kind" => "error", "message" => format_reason(reason)}
   end
 
   defp error_event(reason),
@@ -274,7 +282,12 @@ defmodule KinoAtpClient.AtpSolver do
 
   defp format_reason(reason) when is_binary(reason), do: reason
   defp format_reason(:internal_error), do: "Prover reported an internal error."
-  defp format_reason(:input_error), do: "Prover rejected the input as malformed."
+
+  defp format_reason({:unknown_system, system}) when is_binary(system),
+    do: "SystemOnTPTP does not offer a system named #{system}."
+
+  defp format_reason({:unknown_szs_status, word}) when is_binary(word),
+    do: "Prover reported a status outside the SZS ontology: " <> word
 
   defp format_reason({:prover_not_found, exe}) when is_binary(exe),
     do: "Prover executable not found on PATH: #{exe}"
@@ -308,6 +321,62 @@ defmodule KinoAtpClient.AtpSolver do
 
   defp format_reason(reason), do: inspect(reason, pretty: true, width: 80)
 
+  # ─── Lint payload ──────────────────────────────────────────────────────
+
+  # `Tptp.analyze/2` runs the parser and `Tptp.Lint` in one traversal and also
+  # yields the symbol table the editor uses for hovers and completion.
+  defp lint(problem, tptp4x?) do
+    analysis = problem |> Tptp.analyze() |> Analysis.with_line_index()
+
+    diagnostics =
+      Diagnostic.sort(analysis.diagnostics ++ remote_diagnostics(analysis, tptp4x?))
+
+    %{
+      "diagnostics" => Enum.map(diagnostics, &diagnostic_payload(analysis, &1)),
+      "symbols" => Enum.map(Map.values(analysis.table.symbols), &symbol_payload(analysis, &1))
+    }
+  end
+
+  # TPTP4X only runs on input the local pass accepts: its view of a file that
+  # does not parse just duplicates the local error.
+  defp remote_diagnostics(_analysis, false), do: []
+
+  defp remote_diagnostics(analysis, true) do
+    if Diagnostic.any_errors?(analysis.diagnostics),
+      do: [],
+      else: Tptp4x.analyze(analysis, [])
+  end
+
+  defp diagnostic_payload(analysis, %Diagnostic{span: span} = diagnostic) do
+    {line, column} = Analysis.line_column(analysis, span.offset)
+    {end_line, end_column} = Analysis.line_column(analysis, Span.ending(span))
+
+    %{
+      "severity" => Atom.to_string(diagnostic.severity),
+      "message" => diagnostic_message(diagnostic),
+      "source" => diagnostic.code,
+      "line" => line,
+      "column" => column,
+      "end_line" => end_line,
+      "end_column" => end_column
+    }
+  end
+
+  defp diagnostic_message(%Diagnostic{message: message, hint: nil}), do: message
+  defp diagnostic_message(%Diagnostic{message: message, hint: hint}), do: message <> "\n" <> hint
+
+  defp symbol_payload(analysis, %{name: name, declared_as: type, declared_at: span}) do
+    %{"name" => name, "type" => symbol_type(type), "line" => symbol_line(analysis, span)}
+  end
+
+  defp symbol_type(nil), do: nil
+  defp symbol_type(node), do: Canonical.to_string(node)
+
+  defp symbol_line(_analysis, nil), do: nil
+
+  defp symbol_line(analysis, %Span{offset: offset}),
+    do: analysis |> Analysis.line_column(offset) |> elem(0)
+
   # ─── Task lifecycle helpers ──────────────────────────────────────────────
 
   defp cancel_task(ctx, key) do
@@ -337,10 +406,10 @@ defmodule KinoAtpClient.AtpSolver do
     system = #{inspect(sys)}
     time_limit = #{inspect(tl)}
 
-    case AtpClient.SystemOnTptp.query_system(problem, system, time_limit_sec: time_limit, raw: true) do
-      {:ok, output} ->
-        IO.puts(output)
-        output
+    case AtpClient.SystemOnTptp.query_system(problem, system, time_limit_sec: time_limit) do
+      {:ok, result} ->
+        IO.puts(result.output)
+        result
 
       {:error, reason} ->
         raise "SystemOnTPTP error: \#{inspect(reason)}"
@@ -374,8 +443,8 @@ defmodule KinoAtpClient.AtpSolver do
     # Uses the auto-managed local Isabelle server when `isabelle` is on PATH,
     # otherwise falls back to AtpClient.Isabelle's remote-config path.
     case KinoAtpClient.IsabelleRuntime.available?() do
-      :ok -> KinoAtpClient.IsabelleRuntime.query_tptp(problem, proof_method: #{inspect(method)})
-      {:error, _} -> AtpClient.Isabelle.query_tptp(problem, proof_method: #{inspect(method)})
+      :ok -> KinoAtpClient.IsabelleRuntime.query(problem, proof_method: #{inspect(method)})
+      {:error, _} -> AtpClient.Isabelle.query(problem, proof_method: #{inspect(method)})
     end
     """
   end

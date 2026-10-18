@@ -19,7 +19,7 @@ defmodule KinoAtpClient do
 
   ## Usage
 
-      Mix.install([{:kino_atp_client, "~> 0.6"}])
+      Mix.install([{:kino_atp_client, "~> 0.8"}])
 
   After installation, both Smart Cells appear in the Livebook cell picker.
   Insert an "ATP Backend Configuration" cell first to set credentials, then
@@ -72,8 +72,8 @@ defmodule KinoAtpClient do
   blue for models, amber for disproved conclusions, orange for resource
   exhaustion, red for prover errors, grey for undecided.
 
-  See `AtpClient.ResultNormalization` for the exhaustive list of atoms and
-  the classifier rules, and
+  See `Tptp.Szs.Ontology` for the exhaustive list of atoms,
+  `AtpClient.Verdict` for the classifier rules, and
   <https://tptp.org/UserDocs/SZSOntology/> for the ontology itself.
   """
 end

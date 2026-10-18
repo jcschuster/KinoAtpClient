@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Common commands
 
 ```bash
-mix deps.get                          # fetch Hex + git deps (atp_client comes from GitHub)
+mix deps.get                          # all deps come from Hex (atp_client pulls in tptp)
 mix compile
 mix format
 mix credo --all                       # see .claude/CLAUDE.md: tooling is allowed
@@ -39,7 +39,17 @@ Adding per-cell UI knobs that don't live in `config_schema/0` (e.g. StarExec's "
 
 ### Result rendering is per-backend
 
+Every backend returns `{:ok, %AtpClient.Result{}}` (SZS `status` as a `Tptp.Szs.Ontology` atom, verbatim `output`, the `system` that ran, backend-specific `details`) or `{:error, reason}`. Isabelle's per-lemma verdicts are in `details.lemmas` as `%{name, status}`.
+
 `AtpSolver.run_backend/1` is one pattern-matched clause per backend; each clause returns a `{:broadcast, event, payload}` tuple that the parent process forwards to the JS side. The JS then picks the right renderer for that event: raw prover output for SystemOnTPTP, a normalized SZS badge for StarExec/LocalExec, a per-lemma table for Isabelle. When adding a backend, add both a `run_backend` clause **and** the matching event handler in `assets/atp_solver/js/`.
+
+### Linting comes from `tptp`
+
+The editor's `check_syntax` event runs `Tptp.analyze/2` (parser + `Tptp.Lint` + symbol table in one traversal) and, when the TPTP4X toggle is on and the local pass found no error, `AtpClient.Analyzer.Tptp4x`. Diagnostics carry byte spans; `AtpSolver` converts them to the one-based `line`/`column`/`end_line`/`end_column` the Monaco markers expect via `Tptp.Analysis.line_column/2`, so the JS never sees spans. Symbols are sent as `%{name, type, line}` with `type` printed by `Tptp.Printer.Canonical`.
+
+### SystemOnTPTP systems are listed by name
+
+The solver dropdown lists bare system names (`"Vampire"`, not `"Vampire---5.0.1"`) from `SystemOnTptp.systems(capability: :prove)`; `query_system/3` resolves a name to the latest advertised version, and the result's `system` reports the version that ran. Persisted identifiers from older notebooks are mapped back to a name with `AtpClient.System.name/1` in `pick_solver/2`. The systems agent starts from atp_client's bundled snapshot, so the list is available without a network round-trip.
 
 ### Tasks must be cancellable
 
@@ -47,12 +57,12 @@ Both cells run lint, solve, and verify calls as `Task.async`. Whenever a new tas
 
 ### Isabelle is special
 
-`KinoAtpClient.IsabelleRuntime` is a lazy singleton GenServer that auto-spawns a local `isabelle server`, opens one `HOL` session, loads the bundled `TPTP.thy`, and reuses both across solves. It is started as a permanent child of `KinoAtpClient.Application` but stays *idle* until the first `query_tptp/2` call — no Isabelle process is spawned just by loading the package. The ~30 s `HOL` start-up only happens on the first solve click.
+`KinoAtpClient.IsabelleRuntime` is a lazy singleton GenServer that auto-spawns a local `isabelle server`, opens one `HOL` session, loads the bundled `TPTP.thy`, and reuses both across solves. It is started as a permanent child of `KinoAtpClient.Application` but stays *idle* until the first `query/2` call — no Isabelle process is spawned just by loading the package. The ~30 s `HOL` start-up only happens on the first solve click.
 
 `AtpSolver.isabelle_query/2` dispatches in this order:
-1. Remote Isabelle configured (i.e. `:password` set in `Application.get_env(:atp_client, :isabelle)`) → `AtpClient.Isabelle.query_tptp/2`.
+1. Remote Isabelle configured (i.e. `:password` set in `Application.get_env(:atp_client, :isabelle)`) → `AtpClient.Isabelle.query/2`.
 2. Local `isabelle` on `PATH` (or `ISABELLE_TOOL` set) → the auto-managed runtime.
-3. Neither → defer to `AtpClient.Isabelle.query_tptp/2` so its canonical config error surfaces.
+3. Neither → defer to `AtpClient.Isabelle.query/2` so its canonical config error surfaces.
 
 `BackendConfig` has matching special-casing: when the user has entered **no** Isabelle values, Verify probes the local executable instead of trying to log into a non-existent remote server. The banner above the form ("isabelle_notice") changes based on `IsabelleRuntime.available?/0`.
 
@@ -61,3 +71,7 @@ Both cells run lint, solve, and verify calls as `Task.async`. Whenever a new tas
 Both cells use `Kino.JS.Live`. The Elixir side declares `assets_path: "lib/assets/<cell>"` — that path is the **Vite build output**, not the source. Source lives in `assets/<cell>/js/` and Vite (`assets/<cell>/vite.config.js`) writes the bundle into `../../lib/assets/<cell>/`. After editing JS, run the `build` script in the corresponding `assets/<cell>/` directory; otherwise the running Livebook will keep serving the old bundle.
 
 State flows: Elixir → JS via `handle_connect/1` (initial payload, with task refs dropped) and `broadcast_event/3` (deltas); JS → Elixir via `handle_event/3`. The list of keys persisted between Livebook reloads is the `@persisted_keys` module attribute on each cell — add to it when introducing new persistent state.
+
+## Releasing
+
+The package's minor version tracks `atp_client`'s (`kino_atp_client` 0.8.x requires `atp_client ~> 0.8`). For a release: bump `@version` in `mix.exs` and the `{:kino_atp_client, "~> …"}` snippets in `README.md`, `examples/demo.livemd` and `lib/kino_atp_client.ex`; rebuild both asset bundles if any JS/CSS changed; run `mix format --check-formatted`, `mix compile --warnings-as-errors`, `mix credo --all`, `mix dialyzer`, `mix docs` and `mix hex.build`; then tag `v<version>` (ExDoc's `source_ref` points at that tag) and `mix hex.publish`.
